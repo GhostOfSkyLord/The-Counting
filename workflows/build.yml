@@ -1,0 +1,118 @@
+# Builds The Counting for Windows and Mac on GitHub's own machines, so nobody needs Python installed, and then
+# TESTS each finished app by running its built-in self-check. See CLOUD_BUILD.md for a step-by-step guide.
+#
+# How to use: upload this project to a GitHub repository, then either
+#   - open the Actions tab, choose "Build The Counting", and press Run workflow (files appear under Artifacts), or
+#   - create a release tag such as v0.7.1 (Releases, then Draft a new release). The downloads are attached to it.
+# The unit tests run on Windows, Mac (both chip types) and Linux first. If one fails, nothing is built.
+# After each build the app is started with --selftest. The result is shown in the log and saved as a "selfcheck-..."
+# download, so you can see whether a Mac or Windows app works without owning that computer.
+name: Build The Counting
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, macos-15-intel, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install certifi
+      - run: python -m unittest discover -s tests -p "test_*.py"
+
+  build:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, name: TheCounting-windows,            sep: ";", publish: true }
+          - { os: macos-latest,   name: TheCounting-mac-apple-silicon,  sep: ":", publish: true }
+          - { os: macos-15-intel, name: TheCounting-mac-intel,          sep: ":", publish: true }
+          - { os: ubuntu-latest,  name: TheCounting-linux-check,        sep: ":", publish: false }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements.txt pyinstaller
+      - name: Build the app
+        run: python -m PyInstaller --noconfirm --clean --windowed --name "The Counting" --add-data "tally_app/web${{ matrix.sep }}tally_app/web" --collect-submodules webview --collect-data certifi run_thecounting.py
+
+      # ---- test the finished app: does it start, find its files, talk to TMDB securely? ----
+      - name: Self-check (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath "dist/The Counting/The Counting.exe" -ArgumentList "--selftest","selfcheck.json" -Wait -PassThru
+          if (Test-Path selfcheck.json) { (Get-Content selfcheck.json -Raw | ConvertFrom-Json).text } else { Write-Host "No self-check file was written." }
+          exit $p.ExitCode
+      - name: Self-check (Mac)
+        if: runner.os == 'macOS'
+        run: |
+          set +e
+          "dist/The Counting.app/Contents/MacOS/The Counting" --selftest selfcheck.json
+          code=$?
+          exit $code
+      - name: Self-check (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          "dist/The Counting/The Counting" --selftest selfcheck.json
+      - name: Mac details (signing, minimum macOS version)
+        if: runner.os == 'macOS'
+        continue-on-error: true
+        run: |
+          echo "--- signature"; codesign -dv --verbose=2 "dist/The Counting.app" 2>&1 | head -20
+          echo "--- would Gatekeeper accept it? (expected: no, the app is not notarized)"; spctl --assess --type execute -vv "dist/The Counting.app" 2>&1 | head -5
+          echo "--- minimum macOS version built in"; vtool -show-build "dist/The Counting.app/Contents/MacOS/The Counting" 2>&1 | grep -E "minos|platform|sdk" | head -6
+          lipo -info "dist/The Counting.app/Contents/MacOS/The Counting"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: selfcheck-${{ matrix.name }}
+          path: selfcheck.json
+          if-no-files-found: warn
+
+      - name: Zip (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path "dist/The Counting" -DestinationPath ${{ matrix.name }}.zip
+      - name: Zip (Mac)
+        if: runner.os == 'macOS'
+        run: ditto -c -k --sequesterRsrc --keepParent "dist/The Counting.app" ${{ matrix.name }}.zip
+      - uses: actions/upload-artifact@v4
+        if: matrix.publish
+        with:
+          name: ${{ matrix.name }}
+          path: ${{ matrix.name }}.zip
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: downloads
+          pattern: TheCounting-*
+          merge-multiple: true
+      - name: Checksums
+        run: cd downloads && sha256sum *.zip > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            downloads/*.zip
+            downloads/SHA256SUMS.txt
