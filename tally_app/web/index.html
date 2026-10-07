@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en"{{THEME_ATTR}}>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#1C2140">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="The Counting">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<link rel="icon" type="image/png" href="/icons/icon-192.png">
+<meta name="tally-token" content="{{TOKEN}}">
+<title>The Counting</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="mast">
+  <div class="mtop">
+    <div class="logo">
+      <svg viewBox="0 0 66 24" aria-hidden="true">
+        <polygon points="2,22 12,2 22,22" fill="var(--yellow)" stroke="var(--ink)" stroke-width="2" stroke-linejoin="miter"/>
+        <rect x="26" y="5" width="16" height="16" fill="var(--red)" stroke="var(--ink)" stroke-width="2"/>
+        <circle cx="55" cy="13" r="8" fill="var(--blue)" stroke="var(--ink)" stroke-width="2"/>
+      </svg>
+      <span>The Counting</span>
+    </div>
+    <nav class="tabs" id="tabs" aria-label="Main"></nav>
+    <div id="themeslot"></div>
+  </div>
+</header>
+<main id="main"><div class="spin">Loading...</div></main>
+<div class="foot">This product uses the TMDB API but is not endorsed or certified by TMDB. Show data and images from <button class="link" id="tmdblink">themoviedb.org</button>. The Counting {{VERSION}}</div>
+<div id="layer"></div>
+<div id="toast" role="status" aria-live="polite"></div>
+<script src="/qr.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>
